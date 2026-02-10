@@ -208,7 +208,7 @@ mod imp {
             }
         }
 
-        unsafe { CallNextHookEx(0, n_code, w_param, l_param) }
+        unsafe { CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param) }
     }
 
     fn run_hook_thread(context: HookContext, ready_tx: mpsc::SyncSender<Result<u32, String>>) {
@@ -219,7 +219,7 @@ mod imp {
             let module_handle = GetModuleHandleW(std::ptr::null());
             let hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), module_handle, 0);
 
-            if hook == 0 {
+            if hook == std::ptr::null_mut() {
                 let error = std::io::Error::last_os_error();
                 *hook_context().lock() = None;
                 let _ = ready_tx.send(Err(format!("安装鼠标全局 Hook 失败: {error}")));
@@ -230,7 +230,7 @@ mod imp {
 
             let mut msg = std::mem::zeroed();
             loop {
-                let result = GetMessageW(&mut msg, 0, 0, 0);
+                let result = GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0);
                 if result <= 0 {
                     break;
                 }

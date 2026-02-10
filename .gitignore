@@ -4,3 +4,10 @@ src-tauri/target/
 *.log
 .DS_Store
 
+# driver build artifacts
+driver/windows/artifacts/
+driver/windows/src/upstream/
+src-tauri/drivers/windows/*.sys
+src-tauri/drivers/windows/*.inf
+src-tauri/drivers/windows/*.cat
+src-tauri/drivers/windows/driver-package-manifest.json

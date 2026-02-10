@@ -1,11 +1,13 @@
 {
   "name": "windows-mic-ctrl",
   "private": true,
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
+    "stage:driver": "node scripts/stage-driver-assets.mjs",
+    "build:release": "npm run stage:driver && tauri build",
     "dev:renderer": "vite",
     "build:renderer": "vite build",
     "typecheck": "tsc --noEmit"

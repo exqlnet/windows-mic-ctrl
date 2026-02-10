@@ -202,24 +202,35 @@ impl AppState {
             return Ok(());
         }
 
-        let mut cfg = self.config.lock().clone();
-        complete_route_defaults(&mut cfg.route)?;
+        let result = (|| -> Result<EngineWorker, AppError> {
+            let mut cfg = self.config.lock().clone();
+            complete_route_defaults(&mut cfg.route)?;
 
-        if cfg.route.input_device_id.is_empty() || cfg.route.bridge_output_device_id.is_empty() {
-            return Err(AppError::InvalidArgument(
-                "请先选择可用输入设备与输出设备".to_string(),
-            ));
+            if cfg.route.input_device_id.is_empty() || cfg.route.bridge_output_device_id.is_empty()
+            {
+                return Err(AppError::InvalidArgument(
+                    "请先选择可用输入设备与输出设备".to_string(),
+                ));
+            }
+
+            EngineWorker::new(
+                cfg.route.input_device_id.clone(),
+                cfg.route.bridge_output_device_id.clone(),
+                self.gate.clone(),
+            )
+        })();
+
+        match result {
+            Ok(worker) => {
+                *self.engine.lock() = Some(worker);
+                *self.last_error.lock() = None;
+                Ok(())
+            }
+            Err(e) => {
+                *self.last_error.lock() = Some(e.to_string());
+                Err(e)
+            }
         }
-
-        let worker = EngineWorker::new(
-            cfg.route.input_device_id.clone(),
-            cfg.route.bridge_output_device_id.clone(),
-            self.gate.clone(),
-        )?;
-        *self.engine.lock() = Some(worker);
-        *self.last_error.lock() = None;
-
-        Ok(())
     }
 
     pub fn stop_engine(&self) {
@@ -232,7 +243,21 @@ impl AppState {
     }
 
     pub fn virtual_mic_status(&self) -> VirtualMicStatus {
-        self.virtual_mic_status.lock().clone()
+        match virtual_mic::initialize() {
+            Ok(status) => {
+                *self.virtual_mic_status.lock() = status.clone();
+                status
+            }
+            Err(e) => {
+                let fallback = VirtualMicStatus {
+                    backend: "windows-kernel-driver".to_string(),
+                    ready: false,
+                    detail: format!("虚拟麦状态刷新失败: {e}"),
+                };
+                *self.virtual_mic_status.lock() = fallback.clone();
+                fallback
+            }
+        }
     }
 
     pub fn runtime_status(&self) -> RuntimeStatus {

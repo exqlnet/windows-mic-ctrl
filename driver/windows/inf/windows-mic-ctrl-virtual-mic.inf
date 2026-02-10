@@ -1,0 +1,37 @@
+; Windows Mic Ctrl Virtual Mic INF 模板（占位）
+; 注意：当前文件为结构模板，不可直接用于生产签名发布。
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = MEDIA
+ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider    = %ProviderName%
+CatalogFile = windows-mic-ctrl-virtual-mic.cat
+DriverVer   = 02/11/2026,0.2.0.0
+
+[Manufacturer]
+%ProviderName% = DeviceList,NTamd64
+
+[DeviceList.NTamd64]
+%DeviceName% = Install_Section, ROOT\WINDOWS_MIC_CTRL_VIRTUAL_MIC
+
+[Install_Section]
+CopyFiles = DriverCopyFiles
+
+[DriverCopyFiles]
+windows-mic-ctrl-virtual-mic.sys
+
+[Install_Section.Services]
+AddService = windows_mic_ctrl_virtual_mic,0x00000002,Service_Install
+
+[Service_Install]
+DisplayName    = %ServiceDisplayName%
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\windows-mic-ctrl-virtual-mic.sys
+
+[Strings]
+ProviderName        = "exqlnet"
+DeviceName          = "Windows Mic Ctrl Virtual Mic"
+ServiceDisplayName  = "Windows Mic Ctrl Virtual Mic Service"

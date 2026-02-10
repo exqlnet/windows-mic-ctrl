@@ -34,20 +34,33 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
-      - name: Build Tauri app
-        run: npm run build
+      - name: Build Tauri app (with bundled driver files)
+        run: npm run build:release
 
       - name: Collect release files (Windows)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          New-Item -ItemType Directory -Force -Path release-assets/driver | Out-Null
+
           Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File |
             Where-Object { $_.Name -match '\.(msi|exe|zip)$' } |
             Copy-Item -Destination release-assets -Force
+
+          Get-ChildItem -Path "src-tauri/drivers/windows" -File |
+            Where-Object { $_.Name -match '\.(sys|inf|cat|json)$' } |
+            Copy-Item -Destination release-assets/driver -Force
+
           if (-not (Get-ChildItem release-assets -File | Select-Object -First 1)) {
             throw "No Windows release assets were collected"
           }
-          Get-ChildItem release-assets
+
+          if (-not (Get-ChildItem release-assets/driver -File | Select-Object -First 1)) {
+            throw "No bundled driver assets were collected"
+          }
+
+          Compress-Archive -Path release-assets/driver/* -DestinationPath release-assets/windows-driver-package.zip -Force
+          Get-ChildItem release-assets -Recurse
 
       - name: Upload assets to current release
         uses: softprops/action-gh-release@v2

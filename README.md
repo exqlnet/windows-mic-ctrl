@@ -5,11 +5,11 @@ Windows 麦克风按键控制工具（Rust + Tauri）。
 ## 功能
 
 - 物理麦克风输入门控（PTT / Toggle / Hybrid）
-- 全局快捷键按键录入（不再手输字符串）
-- 启动即自动初始化语音链路
+- 全局快捷键录入（点击输入框后直接按键，支持键盘组合与鼠标按键）
+- 启动后自动初始化语音链路（配置变更自动保存并自动应用）
 - 主界面仅保留物理麦克风输入选择
-- 最小化到托盘，托盘支持切换开麦/闭麦与重初始化
-- 运行状态诊断（缓冲、XRuns、错误）
+- 关闭窗口可最小化到托盘（托盘仅保留状态/显示主界面/退出）
+- 运行诊断（缓冲、XRuns、最近错误、虚拟麦驱动状态）
 
 ## 技术栈
 
@@ -24,17 +24,36 @@ npm install
 npm run dev
 ```
 
-## 首次使用
+## 发布构建（含驱动打包）
 
-1. 安装虚拟声卡（例如 VB-CABLE）。
-2. 打开应用后会自动初始化语音链路。
-3. 在主界面选择物理麦克风输入设备并保存。
-4. 在 QQ 中将语音输入设备设置为虚拟声卡输出端（例如 `CABLE Output`）。
-5. 点击“按键录入”，按下你的快捷键组合。
+在执行发布构建前，请先准备驱动产物目录：`driver/windows/artifacts/driver`，至少包含：
+
+- `.sys`
+- `.inf`
+- `.cat`
+
+然后执行：
+
+```bash
+npm run build:release
+```
+
+该流程会自动执行：
+
+1. `npm run stage:driver`：校验并拷贝驱动文件到 `src-tauri/drivers/windows`
+2. `tauri build`：将驱动文件随安装包资源一起打包
 
 ## 关于“程序自建虚拟麦克风”
 
-当前仓库已新增 `driver/` 驱动工程骨架与接口协议文档，用于后续实现内核态虚拟麦端点。当前可运行版本仍采用兼容路径（依赖已安装的虚拟声卡设备）。
+仓库已包含 `driver/windows/` 驱动工程化骨架与脚本（SysVAD 派生路线）。
+
+当前状态：
+
+- 应用已能真实检测系统中是否存在 `Windows Mic Ctrl Virtual Mic` 录制端点。
+- 若未检测到，诊断区会提示驱动服务/Test Mode 状态与脚本化安装步骤。
+- 真正可被 QQ 选中的“自建虚拟麦端点”，仍需在 Windows + WDK 环境完成驱动派生实现与安装。
+
+可参考：`driver/windows/docs/build-and-install.md`
 
 ## 当前范围
 
@@ -43,4 +62,6 @@ npm run dev
 
 ## Release
 
-- 当在 GitHub 发布版本（Release Published）时，仅构建 Windows 产物并上传到该 Release。
+- 当 GitHub 发布版本（Release Published）时，会执行 `npm run build:release`，并上传：
+  - Windows 安装包产物（`msi` / `exe` / `zip`）
+  - `windows-driver-package.zip`（驱动离线安装包）

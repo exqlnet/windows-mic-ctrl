@@ -1,0 +1,52 @@
+Param(
+  [string]$SysvadRoot = "..\src\upstream\sysvad",
+  [string]$Configuration = "Release",
+  [string]$Platform = "x64",
+  [string]$OutputRoot = "..\artifacts\driver"
+)
+
+$ErrorActionPreference = "Stop"
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$sysvadPath = Resolve-Path (Join-Path $scriptDir $SysvadRoot) -ErrorAction SilentlyContinue
+if (-not $sysvadPath) {
+  throw "未找到 SysVAD 源码目录，请先运行 prepare-sysvad.ps1。"
+}
+$sysvadPath = $sysvadPath.Path
+
+$msbuild = Get-Command msbuild -ErrorAction SilentlyContinue
+if (-not $msbuild) {
+  throw "未检测到 msbuild，请安装 Visual Studio Build Tools + WDK。"
+}
+
+$solution = Get-ChildItem -Path $sysvadPath -Filter *.sln -Recurse | Select-Object -First 1
+if (-not $solution) {
+  throw "未找到 .sln，请确认 SysVAD 源码完整。"
+}
+
+Write-Host "使用解决方案: $($solution.FullName)"
+& $msbuild.Source $solution.FullName /m /p:Configuration=$Configuration /p:Platform=$Platform
+if ($LASTEXITCODE -ne 0) {
+  throw "msbuild 失败，退出码: $LASTEXITCODE"
+}
+
+$outputPath = Join-Path $scriptDir $OutputRoot
+if (Test-Path $outputPath) {
+  Remove-Item -Recurse -Force $outputPath
+}
+New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
+
+$artifacts = Get-ChildItem -Path $sysvadPath -Recurse -File | Where-Object {
+  $_.Extension -in ".sys", ".cat", ".inf"
+}
+
+if (-not $artifacts) {
+  throw "未找到驱动产物（.sys/.cat/.inf），请检查工程配置。"
+}
+
+$artifacts | ForEach-Object {
+  Copy-Item $_.FullName -Destination (Join-Path $outputPath $_.Name) -Force
+}
+
+Write-Host "驱动构建产物已输出到: $outputPath"
+Get-ChildItem -Path $outputPath -File | Format-Table Name, Length -AutoSize

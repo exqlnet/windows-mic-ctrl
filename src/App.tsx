@@ -130,8 +130,16 @@ export default function App() {
   useEffect(() => {
     refresh().catch((error) => setMessage(String(error)));
     const timer = setInterval(() => {
-      invoke<RuntimeStatus>('get_runtime_status').then(setStatus).catch(() => undefined);
-    }, 1000);
+      Promise.all([
+        invoke<RuntimeStatus>('get_runtime_status'),
+        invoke<VirtualMicStatus>('get_virtual_mic_status'),
+      ])
+        .then(([runtime, vmStatus]) => {
+          setStatus(runtime);
+          setVirtualMic(vmStatus);
+        })
+        .catch(() => undefined);
+    }, 1200);
     return () => clearInterval(timer);
   }, [refresh]);
 

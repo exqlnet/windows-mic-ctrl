@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --primary: 210 100% 56%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 240 4.8% 95.9%;
+    --border: 240 5.9% 90%;
+  }
+
+  .dark {
+    --background: 240 5% 12%;
+    --foreground: 0 0% 98%;
+    --card: 240 5% 16%;
+    --card-foreground: 0 0% 98%;
+    --primary: 210 100% 54%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 240 5% 18%;
+    --border: 240 5% 24%;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}

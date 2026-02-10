@@ -1,0 +1,103 @@
+name: Release Build
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            bundle_dir: src-tauri/target/release/bundle
+          - os: ubuntu-22.04
+            bundle_dir: src-tauri/target/release/bundle
+          - os: macos-14
+            bundle_dir: src-tauri/target/release/bundle
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            curl \
+            wget \
+            file \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
+            || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
+          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
+            || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run build
+
+      - name: Collect release files (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p release-assets
+          find "${{ matrix.bundle_dir }}" -type f \( \
+            -name "*.AppImage" -o \
+            -name "*.deb" -o \
+            -name "*.rpm" -o \
+            -name "*.dmg" -o \
+            -name "*.app.tar.gz" -o \
+            -name "*.tar.gz" \
+          \) -exec cp {} release-assets/ \;
+          ls -la release-assets
+
+      - name: Collect release files (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Get-ChildItem -Path "${{ matrix.bundle_dir }}" -Recurse -File |
+            Where-Object { $_.Name -match '\\.(msi|exe|zip)$' } |
+            Copy-Item -Destination release-assets -Force
+          Get-ChildItem release-assets
+
+      - name: Upload assets to current release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

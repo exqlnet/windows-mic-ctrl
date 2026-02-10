@@ -189,21 +189,19 @@ mod runtime_impl {
         in_cfg: &cpal::SupportedStreamConfig,
     ) -> Result<cpal::SupportedStreamConfig, AppError> {
         let target_rate = in_cfg.sample_rate().0;
-        let target_channels = in_cfg.channels();
 
         let configs: Vec<_> = output
             .supported_output_configs()
             .map_err(|e| AppError::Audio(format!("读取输出配置失败: {e}")))?
             .collect();
 
-        let exact = configs.iter().find(|cfg| {
+        let exact_rate = configs.iter().find(|cfg| {
             cfg.sample_format() == SampleFormat::F32
-                && cfg.channels() == target_channels
                 && cfg.min_sample_rate().0 <= target_rate
                 && cfg.max_sample_rate().0 >= target_rate
         });
 
-        if let Some(cfg) = exact {
+        if let Some(cfg) = exact_rate {
             return Ok(cfg.with_sample_rate(cpal::SampleRate(target_rate)));
         }
 
@@ -219,7 +217,6 @@ mod runtime_impl {
         output_stream: Stream,
         buffer: Arc<Mutex<VecDeque<f32>>>,
         sample_rate: u32,
-        channels: u16,
         xruns: Arc<AtomicU64>,
         last_error: Arc<Mutex<Option<String>>>,
     }
@@ -236,16 +233,9 @@ mod runtime_impl {
             let in_cfg = choose_input_config(&input)?;
             let out_cfg = choose_output_config(&output, &in_cfg)?;
 
-            if in_cfg.channels() != out_cfg.channels() {
-                return Err(AppError::Audio(format!(
-                    "输入/输出声道不一致: {} vs {}",
-                    in_cfg.channels(),
-                    out_cfg.channels()
-                )));
-            }
-
             let sample_rate = out_cfg.sample_rate().0;
-            let channels = out_cfg.channels();
+            let input_channels = usize::from(in_cfg.channels()).max(1);
+            let output_channels = usize::from(out_cfg.channels()).max(1);
 
             let buffer = Arc::new(Mutex::new(VecDeque::<f32>::with_capacity(
                 sample_rate as usize,
@@ -261,11 +251,16 @@ mod runtime_impl {
                     &input_config,
                     move |data: &[f32], _| {
                         let mut queue = in_buffer.lock();
-                        for s in data {
-                            if queue.len() > 96_000 {
+                        for frame in data.chunks(input_channels) {
+                            if frame.is_empty() {
+                                continue;
+                            }
+                            let sum: f32 = frame.iter().copied().sum();
+                            let mono = sum / frame.len() as f32;
+                            if queue.len() > 240_000 {
                                 let _ = queue.pop_front();
                             }
-                            queue.push_back(*s);
+                            queue.push_back(mono);
                         }
                     },
                     move |err| {
@@ -287,19 +282,24 @@ mod runtime_impl {
                     move |data: &mut [f32], _| {
                         let open = out_gate.is_open();
                         let mut queue = out_buffer.lock();
+                        let frame_count = data.len() / output_channels;
                         let mut gain = if open { 1.0 } else { 0.0 };
-                        apply_envelope(&mut gain, open, data.len(), out_sample_rate);
+                        apply_envelope(&mut gain, open, frame_count, out_sample_rate);
 
-                        for sample in data.iter_mut() {
-                            if open {
+                        for frame in data.chunks_mut(output_channels) {
+                            let mono = if open {
                                 if let Some(v) = queue.pop_front() {
-                                    *sample = v * gain;
+                                    v * gain
                                 } else {
-                                    *sample = 0.0;
                                     out_xruns.fetch_add(1, Ordering::Relaxed);
+                                    0.0
                                 }
                             } else {
-                                *sample = 0.0;
+                                0.0
+                            };
+
+                            for sample in frame.iter_mut() {
+                                *sample = mono;
                             }
                         }
                     },
@@ -322,7 +322,6 @@ mod runtime_impl {
                 output_stream,
                 buffer,
                 sample_rate,
-                channels,
                 xruns,
                 last_error,
             })
@@ -330,7 +329,7 @@ mod runtime_impl {
 
         pub fn status(&self, gate_state: crate::types::GateState) -> RuntimeStatus {
             let queue_len = self.buffer.lock().len() as u64;
-            let samples_per_ms = (self.sample_rate as u64 * self.channels as u64) / 1000;
+            let samples_per_ms = (self.sample_rate as u64) / 1000;
             let buffer_level_ms = if samples_per_ms == 0 {
                 0
             } else {

@@ -31,12 +31,19 @@ pub fn create_tray(app: &tauri::AppHandle) -> Result<(), AppError> {
     Ok(())
 }
 
-fn build_menu(app: &tauri::AppHandle, status: &RuntimeStatus) -> Result<tauri::menu::Menu<tauri::Wry>, AppError> {
-    let gate_text = if status.gate_state.is_open { "当前状态：开麦" } else { "当前状态：闭麦" };
+fn build_menu(
+    app: &tauri::AppHandle,
+    status: &RuntimeStatus,
+) -> Result<tauri::menu::Menu<tauri::Wry>, AppError> {
+    let gate_text = if status.gate_state.is_open {
+        "当前状态：开麦"
+    } else {
+        "当前状态：闭麦"
+    };
     let state_text = match status.engine_state {
-        EngineState::Idle => "引擎：未启动",
-        EngineState::Running => "引擎：运行中",
-        EngineState::Error => "引擎：错误",
+        EngineState::Idle => "语音链路：未就绪",
+        EngineState::Running => "语音链路：已就绪",
+        EngineState::Error => "语音链路：错误",
     };
 
     let gate_status = MenuItem::with_id(app, "gate_status", gate_text, false, None::<&str>)
@@ -48,10 +55,14 @@ fn build_menu(app: &tauri::AppHandle, status: &RuntimeStatus) -> Result<tauri::m
         .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
     let toggle_gate = MenuItem::with_id(app, "toggle_gate", "切换开麦/闭麦", true, None::<&str>)
         .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
-    let start_engine = MenuItem::with_id(app, "start_engine", "启动桥接", true, None::<&str>)
-        .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
-    let stop_engine = MenuItem::with_id(app, "stop_engine", "停止桥接", true, None::<&str>)
-        .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
+    let restart_engine = MenuItem::with_id(
+        app,
+        "restart_engine",
+        "重新初始化语音链路",
+        true,
+        None::<&str>,
+    )
+    .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)
         .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
 
@@ -61,8 +72,7 @@ fn build_menu(app: &tauri::AppHandle, status: &RuntimeStatus) -> Result<tauri::m
         .separator()
         .item(&show_main)
         .item(&toggle_gate)
-        .item(&start_engine)
-        .item(&stop_engine)
+        .item(&restart_engine)
         .separator()
         .item(&quit)
         .build()
@@ -87,13 +97,14 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
             state.inner().gate.toggle("tray");
             let _ = app.emit("gate_state_changed", state.inner().gate.snapshot());
         }
-        "start_engine" => {
-            if let Err(e) = state.inner().start_engine() {
-                log::error!("托盘启动引擎失败: {e}");
-            }
-        }
-        "stop_engine" => {
+        "restart_engine" => {
             state.inner().stop_engine();
+            if let Err(e) = state.inner().start_engine() {
+                log::error!("托盘重新初始化语音链路失败: {e}");
+                state
+                    .inner()
+                    .set_last_error(format!("托盘重新初始化失败: {e}"));
+            }
         }
         "quit" => {
             app.exit(0);

@@ -7,6 +7,7 @@ mod gate;
 mod hotkey;
 mod tray;
 mod types;
+mod virtual_mic;
 
 use tauri::{Emitter, Manager};
 
@@ -42,6 +43,11 @@ pub fn run() {
                 .apply(app.handle(), &cfg.hotkey, state.gate.clone())
                 .map_err(|e| e.to_string())?;
 
+            if let Err(e) = state.start_engine() {
+                log::warn!("启动自动初始化失败: {e}");
+                state.set_last_error(format!("自动初始化失败: {e}"));
+            }
+
             app.manage(state);
             tray::create_tray(app.handle()).map_err(|e| e.to_string())?;
 
@@ -75,6 +81,7 @@ pub fn run() {
             commands::stop_engine,
             commands::set_mic_gate,
             commands::get_runtime_status,
+            commands::get_virtual_mic_status,
             commands::set_launch_on_startup,
             commands::set_minimize_to_tray,
         ])

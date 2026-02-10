@@ -51,7 +51,12 @@ impl GateController {
 }
 
 #[allow(dead_code)]
-pub fn apply_envelope(current_gain: &mut f32, target_open: bool, frame_count: usize, sample_rate: u32) {
+pub fn apply_envelope(
+    current_gain: &mut f32,
+    target_open: bool,
+    frame_count: usize,
+    sample_rate: u32,
+) {
     let attack_release_ms = 8.0_f32;
     let step = if sample_rate == 0 {
         1.0

@@ -4,7 +4,7 @@ use crate::{
     app_state::AppState,
     audio,
     error::AppError,
-    types::{AppConfig, AudioRouteConfig, HotkeyConfig, RuntimeStatus},
+    types::{AppConfig, AudioRouteConfig, HotkeyConfig, RuntimeStatus, VirtualMicStatus},
 };
 
 #[tauri::command]
@@ -75,10 +75,15 @@ pub fn set_mic_gate(
 }
 
 #[tauri::command]
-pub fn get_runtime_status(
-    state: tauri::State<'_, AppState>,
-) -> Result<RuntimeStatus, AppError> {
+pub fn get_runtime_status(state: tauri::State<'_, AppState>) -> Result<RuntimeStatus, AppError> {
     Ok(state.inner().runtime_status())
+}
+
+#[tauri::command]
+pub fn get_virtual_mic_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<VirtualMicStatus, AppError> {
+    Ok(state.inner().virtual_mic_status())
 }
 
 #[tauri::command]

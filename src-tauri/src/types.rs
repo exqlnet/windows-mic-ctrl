@@ -52,7 +52,7 @@ impl Default for HotkeyConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct AudioRouteConfig {
     pub input_device_id: String,
     pub bridge_output_device_id: String,
@@ -121,6 +121,23 @@ impl Default for RuntimeStatus {
             xruns: 0,
             last_error: None,
             gate_state: GateState::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VirtualMicStatus {
+    pub backend: String,
+    pub ready: bool,
+    pub detail: String,
+}
+
+impl Default for VirtualMicStatus {
+    fn default() -> Self {
+        Self {
+            backend: "driver-skeleton".to_string(),
+            ready: false,
+            detail: "虚拟麦驱动骨架已加载，尚未完成内核态设备实现。".to_string(),
         }
     }
 }

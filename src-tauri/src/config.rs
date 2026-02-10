@@ -5,7 +5,8 @@ use crate::{error::AppError, types::AppConfig};
 const CONFIG_FILE_NAME: &str = "config.json";
 
 fn config_dir() -> Result<PathBuf, AppError> {
-    let base = dirs::config_dir().ok_or_else(|| AppError::Config("无法定位配置目录".to_string()))?;
+    let base =
+        dirs::config_dir().ok_or_else(|| AppError::Config("无法定位配置目录".to_string()))?;
     Ok(base.join("windows-mic-ctrl"))
 }
 
@@ -25,8 +26,7 @@ pub fn load_config() -> Result<AppConfig, AppError> {
 pub fn save_config(config: &AppConfig) -> Result<(), AppError> {
     let dir = config_dir()?;
     if !dir.exists() {
-        fs::create_dir_all(&dir)
-            .map_err(|e| AppError::Config(format!("创建配置目录失败: {e}")))?;
+        fs::create_dir_all(&dir).map_err(|e| AppError::Config(format!("创建配置目录失败: {e}")))?;
     }
 
     let path = dir.join(CONFIG_FILE_NAME);

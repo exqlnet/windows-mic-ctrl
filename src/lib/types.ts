@@ -42,6 +42,12 @@ export interface RuntimeStatus {
   gate_state: GateState;
 }
 
+export interface VirtualMicStatus {
+  backend: string;
+  ready: boolean;
+  detail: string;
+}
+
 export interface AppConfig {
   route: AudioRouteConfig;
   hotkey: HotkeyConfig;

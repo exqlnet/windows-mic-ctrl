@@ -48,7 +48,12 @@ impl HotkeyManager {
     }
 }
 
-fn handle_event(app: &tauri::AppHandle, gate: &GateController, mode: &GateMode, state: ShortcutState) {
+fn handle_event(
+    app: &tauri::AppHandle,
+    gate: &GateController,
+    mode: &GateMode,
+    state: ShortcutState,
+) {
     match mode {
         GateMode::Ptt => {
             if state == ShortcutState::Pressed {

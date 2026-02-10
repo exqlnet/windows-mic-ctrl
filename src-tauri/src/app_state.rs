@@ -7,12 +7,13 @@ use std::{
 use parking_lot::Mutex;
 
 use crate::{
-    audio::{list_devices, EngineRuntime},
+    audio::{complete_route_defaults, list_devices, EngineRuntime},
     config,
     error::AppError,
     gate::GateController,
     hotkey::HotkeyManager,
-    types::{AppConfig, AudioRouteConfig, EngineState, GateState, RuntimeStatus},
+    types::{AppConfig, AudioRouteConfig, EngineState, GateState, RuntimeStatus, VirtualMicStatus},
+    virtual_mic,
 };
 
 struct EngineWorker {
@@ -22,7 +23,11 @@ struct EngineWorker {
 }
 
 impl EngineWorker {
-    fn new(input_device_id: String, output_device_id: String, gate: Arc<GateController>) -> Result<Self, AppError> {
+    fn new(
+        input_device_id: String,
+        output_device_id: String,
+        gate: Arc<GateController>,
+    ) -> Result<Self, AppError> {
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
         let (started_tx, started_rx) = mpsc::sync_channel::<Result<(), String>>(1);
         let snapshot = Arc::new(Mutex::new(RuntimeStatus {
@@ -35,29 +40,30 @@ impl EngineWorker {
 
         let snapshot_for_thread = snapshot.clone();
         let join_handle = thread::spawn(move || {
-            let runtime = match EngineRuntime::start(&input_device_id, &output_device_id, gate.clone()) {
-                Ok(runtime) => {
-                    {
-                        let mut status = snapshot_for_thread.lock();
-                        status.engine_state = EngineState::Running;
-                        status.last_error = None;
-                        status.gate_state = gate.snapshot();
+            let runtime =
+                match EngineRuntime::start(&input_device_id, &output_device_id, gate.clone()) {
+                    Ok(runtime) => {
+                        {
+                            let mut status = snapshot_for_thread.lock();
+                            status.engine_state = EngineState::Running;
+                            status.last_error = None;
+                            status.gate_state = gate.snapshot();
+                        }
+                        let _ = started_tx.send(Ok(()));
+                        runtime
                     }
-                    let _ = started_tx.send(Ok(()));
-                    runtime
-                }
-                Err(e) => {
-                    let msg = e.to_string();
-                    {
-                        let mut status = snapshot_for_thread.lock();
-                        status.engine_state = EngineState::Error;
-                        status.last_error = Some(msg.clone());
-                        status.gate_state = gate.snapshot();
+                    Err(e) => {
+                        let msg = e.to_string();
+                        {
+                            let mut status = snapshot_for_thread.lock();
+                            status.engine_state = EngineState::Error;
+                            status.last_error = Some(msg.clone());
+                            status.gate_state = gate.snapshot();
+                        }
+                        let _ = started_tx.send(Err(msg));
+                        return;
                     }
-                    let _ = started_tx.send(Err(msg));
-                    return;
-                }
-            };
+                };
 
             loop {
                 {
@@ -115,29 +121,59 @@ pub struct AppState {
     config: Mutex<AppConfig>,
     engine: Mutex<Option<EngineWorker>>,
     last_error: Mutex<Option<String>>,
+    virtual_mic_status: Mutex<VirtualMicStatus>,
 }
 
 impl AppState {
     pub fn new() -> Result<Self, AppError> {
         let cfg = config::load_config()?;
         let gate = Arc::new(GateController::new(cfg.hotkey.mode.clone()));
-        Ok(Self {
+        let vm_status = virtual_mic::initialize().unwrap_or_else(|e| VirtualMicStatus {
+            backend: "windows-kernel-driver-skeleton".to_string(),
+            ready: false,
+            detail: format!("虚拟麦后端初始化失败: {e}"),
+        });
+
+        let state = Self {
             gate,
             hotkey: HotkeyManager::default(),
             config: Mutex::new(cfg),
             engine: Mutex::new(None),
             last_error: Mutex::new(None),
-        })
+            virtual_mic_status: Mutex::new(vm_status),
+        };
+
+        if let Err(e) = state.ensure_route_defaults() {
+            state.set_last_error(format!("初始化设备失败: {e}"));
+        }
+
+        Ok(state)
     }
 
     pub fn config(&self) -> AppConfig {
         self.config.lock().clone()
     }
 
-    pub fn set_route(&self, route: AudioRouteConfig) -> Result<(), AppError> {
+    pub fn set_route(&self, mut route: AudioRouteConfig) -> Result<(), AppError> {
         let mut cfg = self.config.lock();
+
+        if route.bridge_output_device_id.is_empty() {
+            route.bridge_output_device_id = cfg.route.bridge_output_device_id.clone();
+        }
+
         cfg.route = route;
+        complete_route_defaults(&mut cfg.route)?;
         config::save_config(&cfg)
+    }
+
+    pub fn ensure_route_defaults(&self) -> Result<(), AppError> {
+        let mut cfg = self.config.lock();
+        let before = cfg.route.clone();
+        complete_route_defaults(&mut cfg.route)?;
+        if cfg.route != before {
+            config::save_config(&cfg)?;
+        }
+        Ok(())
     }
 
     pub fn set_hotkey_config(&self, hotkey: crate::types::HotkeyConfig) -> Result<(), AppError> {
@@ -164,10 +200,12 @@ impl AppState {
             return Ok(());
         }
 
-        let cfg = self.config.lock().clone();
+        let mut cfg = self.config.lock().clone();
+        complete_route_defaults(&mut cfg.route)?;
+
         if cfg.route.input_device_id.is_empty() || cfg.route.bridge_output_device_id.is_empty() {
             return Err(AppError::InvalidArgument(
-                "请先选择输入设备与桥接输出设备".to_string(),
+                "请先选择物理麦克风输入设备，并确保虚拟麦端点可用".to_string(),
             ));
         }
 
@@ -196,6 +234,10 @@ impl AppState {
         self.gate.snapshot()
     }
 
+    pub fn virtual_mic_status(&self) -> VirtualMicStatus {
+        self.virtual_mic_status.lock().clone()
+    }
+
     pub fn runtime_status(&self) -> RuntimeStatus {
         let gate_state = self.gate.snapshot();
         if let Some(engine) = self.engine.lock().as_ref() {
@@ -222,7 +264,10 @@ impl AppState {
         }
 
         let devices = list_devices()?;
-        let in_ok = devices.inputs.iter().any(|d| d.id == cfg.route.input_device_id);
+        let in_ok = devices
+            .inputs
+            .iter()
+            .any(|d| d.id == cfg.route.input_device_id);
         let out_ok = devices
             .outputs
             .iter()
@@ -230,7 +275,7 @@ impl AppState {
 
         if !in_ok || !out_ok {
             return Err(AppError::DeviceNotFound(
-                "历史配置中的音频设备已不可用，请重新选择".to_string(),
+                "历史配置中的音频设备已不可用，请重新选择输入设备".to_string(),
             ));
         }
 

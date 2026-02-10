@@ -2,7 +2,7 @@ use cpal::traits::{DeviceTrait, HostTrait};
 
 use crate::{
     error::AppError,
-    types::{DeviceDirection, DeviceInfo, DeviceList},
+    types::{AudioRouteConfig, DeviceDirection, DeviceInfo, DeviceList},
 };
 
 fn host() -> cpal::Host {
@@ -69,6 +69,43 @@ pub fn list_devices() -> Result<DeviceList, AppError> {
     }
 
     Ok(DeviceList { inputs, outputs })
+}
+
+fn pick_default_input(devices: &DeviceList) -> Option<&DeviceInfo> {
+    devices
+        .inputs
+        .iter()
+        .find(|d| d.is_default)
+        .or_else(|| devices.inputs.first())
+}
+
+fn pick_virtual_output(devices: &DeviceList) -> Option<&DeviceInfo> {
+    devices
+        .outputs
+        .iter()
+        .find(|d| d.is_virtual_candidate && d.is_default)
+        .or_else(|| devices.outputs.iter().find(|d| d.is_virtual_candidate))
+}
+
+pub fn complete_route_defaults(route: &mut AudioRouteConfig) -> Result<(), AppError> {
+    let devices = list_devices()?;
+
+    if route.input_device_id.is_empty() {
+        let input = pick_default_input(&devices)
+            .ok_or_else(|| AppError::DeviceNotFound("未检测到可用物理输入设备".to_string()))?;
+        route.input_device_id = input.id.clone();
+    }
+
+    if route.bridge_output_device_id.is_empty() {
+        let output = pick_virtual_output(&devices).ok_or_else(|| {
+            AppError::DeviceNotFound(
+                "未检测到可用虚拟麦克风输出端点，请先安装虚拟声卡（如 VB-CABLE）".to_string(),
+            )
+        })?;
+        route.bridge_output_device_id = output.id.clone();
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]
@@ -211,7 +248,9 @@ mod runtime_impl {
             let sample_rate = out_cfg.sample_rate().0;
             let channels = out_cfg.channels();
 
-            let buffer = Arc::new(Mutex::new(VecDeque::<f32>::with_capacity(sample_rate as usize)));
+            let buffer = Arc::new(Mutex::new(VecDeque::<f32>::with_capacity(
+                sample_rate as usize,
+            )));
             let xruns = Arc::new(AtomicU64::new(0));
             let last_error = Arc::new(Mutex::new(None::<String>));
 

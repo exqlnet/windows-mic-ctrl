@@ -128,8 +128,10 @@ impl AppState {
     pub fn new() -> Result<Self, AppError> {
         let cfg = config::load_config()?;
         let gate = Arc::new(GateController::new(cfg.hotkey.mode.clone()));
+        gate.set_open(true, "system_startup");
+
         let vm_status = virtual_mic::initialize().unwrap_or_else(|e| VirtualMicStatus {
-            backend: "windows-kernel-driver-skeleton".to_string(),
+            backend: "embedded-virtual-mic-bootstrap".to_string(),
             ready: false,
             detail: format!("虚拟麦后端初始化失败: {e}"),
         });
@@ -144,7 +146,7 @@ impl AppState {
         };
 
         if let Err(e) = state.ensure_route_defaults() {
-            state.set_last_error(format!("初始化设备失败: {e}"));
+            log::warn!("自动补全设备路由失败: {e}");
         }
 
         Ok(state)
@@ -205,7 +207,7 @@ impl AppState {
 
         if cfg.route.input_device_id.is_empty() || cfg.route.bridge_output_device_id.is_empty() {
             return Err(AppError::InvalidArgument(
-                "请先选择物理麦克风输入设备，并确保虚拟麦端点可用".to_string(),
+                "请先选择可用输入设备与输出设备".to_string(),
             ));
         }
 

@@ -85,6 +85,8 @@ fn pick_virtual_output(devices: &DeviceList) -> Option<&DeviceInfo> {
         .iter()
         .find(|d| d.is_virtual_candidate && d.is_default)
         .or_else(|| devices.outputs.iter().find(|d| d.is_virtual_candidate))
+        .or_else(|| devices.outputs.iter().find(|d| d.is_default))
+        .or_else(|| devices.outputs.first())
 }
 
 pub fn complete_route_defaults(route: &mut AudioRouteConfig) -> Result<(), AppError> {
@@ -97,11 +99,8 @@ pub fn complete_route_defaults(route: &mut AudioRouteConfig) -> Result<(), AppEr
     }
 
     if route.bridge_output_device_id.is_empty() {
-        let output = pick_virtual_output(&devices).ok_or_else(|| {
-            AppError::DeviceNotFound(
-                "未检测到可用虚拟麦克风输出端点，请先安装虚拟声卡（如 VB-CABLE）".to_string(),
-            )
-        })?;
+        let output = pick_virtual_output(&devices)
+            .ok_or_else(|| AppError::DeviceNotFound("未检测到可用输出设备".to_string()))?;
         route.bridge_output_device_id = output.id.clone();
     }
 

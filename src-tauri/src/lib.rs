@@ -5,6 +5,7 @@ mod config;
 mod error;
 mod gate;
 mod hotkey;
+mod mouse_hook;
 mod tray;
 mod types;
 mod virtual_mic;
@@ -34,7 +35,6 @@ pub fn run() {
 
             if let Err(e) = state.validate_route_exists() {
                 log::warn!("历史设备校验失败: {e}");
-                state.set_last_error(e.to_string());
             }
 
             let cfg = state.config();
@@ -45,7 +45,6 @@ pub fn run() {
 
             if let Err(e) = state.start_engine() {
                 log::warn!("启动自动初始化失败: {e}");
-                state.set_last_error(format!("自动初始化失败: {e}"));
             }
 
             app.manage(state);

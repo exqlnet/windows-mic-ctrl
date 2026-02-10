@@ -7,12 +7,22 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use crate::{
     error::AppError,
     gate::GateController,
+    mouse_hook::{is_mouse_accelerator, MouseHookManager},
     types::{GateMode, HotkeyConfig},
 };
 
-#[derive(Default)]
 pub struct HotkeyManager {
     current: RwLock<Option<String>>,
+    mouse_hook: MouseHookManager,
+}
+
+impl Default for HotkeyManager {
+    fn default() -> Self {
+        Self {
+            current: RwLock::new(None),
+            mouse_hook: MouseHookManager::default(),
+        }
+    }
 }
 
 impl HotkeyManager {
@@ -28,6 +38,15 @@ impl HotkeyManager {
             if let Ok(old_shortcut) = Shortcut::from_str(&current) {
                 let _ = manager.unregister(old_shortcut);
             }
+        }
+
+        self.mouse_hook.unregister();
+
+        if is_mouse_accelerator(&config.accelerator) {
+            self.mouse_hook
+                .register(app, &config.accelerator, gate, config.mode.clone())?;
+            *self.current.write() = None;
+            return Ok(());
         }
 
         let shortcut = Shortcut::from_str(&config.accelerator)

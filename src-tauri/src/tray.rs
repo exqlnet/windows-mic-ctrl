@@ -1,7 +1,7 @@
 use tauri::{
     menu::{MenuBuilder, MenuItem},
     tray::TrayIconBuilder,
-    Emitter, Manager,
+    Manager,
 };
 
 use crate::{
@@ -35,25 +35,16 @@ fn build_menu(
     app: &tauri::AppHandle,
     status: &RuntimeStatus,
 ) -> Result<tauri::menu::Menu<tauri::Wry>, AppError> {
-    let gate_text = if status.gate_state.is_open {
-        "当前状态：开麦"
-    } else {
-        "当前状态：闭麦"
-    };
     let state_text = match status.engine_state {
         EngineState::Idle => "语音链路：未就绪",
         EngineState::Running => "语音链路：已就绪",
         EngineState::Error => "语音链路：错误",
     };
 
-    let gate_status = MenuItem::with_id(app, "gate_status", gate_text, false, None::<&str>)
-        .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
     let engine_status = MenuItem::with_id(app, "engine_status", state_text, false, None::<&str>)
         .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
 
     let show_main = MenuItem::with_id(app, "show_main", "显示主界面", true, None::<&str>)
-        .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
-    let toggle_gate = MenuItem::with_id(app, "toggle_gate", "切换开麦/闭麦", true, None::<&str>)
         .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
     let restart_engine = MenuItem::with_id(
         app,
@@ -67,11 +58,9 @@ fn build_menu(
         .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
 
     MenuBuilder::new(app)
-        .item(&gate_status)
         .item(&engine_status)
         .separator()
         .item(&show_main)
-        .item(&toggle_gate)
         .item(&restart_engine)
         .separator()
         .item(&quit)
@@ -92,10 +81,6 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-        }
-        "toggle_gate" => {
-            state.inner().gate.toggle("tray");
-            let _ = app.emit("gate_state_changed", state.inner().gate.snapshot());
         }
         "restart_engine" => {
             state.inner().stop_engine();

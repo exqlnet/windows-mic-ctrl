@@ -12,19 +12,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-2022
-            bundle_dir: src-tauri/target/release/bundle
-          - os: ubuntu-22.04
-            bundle_dir: src-tauri/target/release/bundle
-          - os: macos-14
-            bundle_dir: src-tauri/target/release/bundle
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-2022
 
     steps:
       - name: Checkout
@@ -41,67 +31,17 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Linux deps
-        if: runner.os == 'Linux'
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            pkg-config \
-            curl \
-            wget \
-            file \
-            patchelf \
-            libssl-dev \
-            libasound2-dev \
-            libgtk-3-dev \
-            librsvg2-dev \
-            libayatana-appindicator3-dev
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
-            || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
-          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
-            || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
-
       - name: Install frontend deps
         run: npm ci
 
       - name: Build Tauri app
         run: npm run build
 
-      - name: Collect release files (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p release-assets
-          find "${{ matrix.bundle_dir }}" -type f \( \
-            -name "*.AppImage" -o \
-            -name "*.deb" -o \
-            -name "*.rpm" \
-          \) -exec cp {} release-assets/ \;
-          ls -la release-assets
-          test "$(find release-assets -type f | wc -l)" -gt 0
-
-      - name: Collect release files (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p release-assets
-          find "${{ matrix.bundle_dir }}" -type f \( \
-            -name "*.dmg" -o \
-            -name "*.app.tar.gz" \
-          \) -exec cp {} release-assets/ \;
-          ls -la release-assets
-          test "$(find release-assets -type f | wc -l)" -gt 0
-
       - name: Collect release files (Windows)
-        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          Get-ChildItem -Path "${{ matrix.bundle_dir }}" -Recurse -File |
+          Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File |
             Where-Object { $_.Name -match '\.(msi|exe|zip)$' } |
             Copy-Item -Destination release-assets -Force
           if (-not (Get-ChildItem release-assets -File | Select-Object -First 1)) {

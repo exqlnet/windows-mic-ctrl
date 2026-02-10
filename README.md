@@ -40,10 +40,10 @@ npm run dev
 
 ## CI / Release
 
-- 仅 `Release Build`：当你在 GitHub 发布一个版本（Release Published）时，自动构建 Windows / macOS / Linux 可执行包并上传到该 Release。
+- 仅 `Release Build`：当你在 GitHub 发布一个版本（Release Published）时，仅构建 Windows 可执行包并上传到该 Release。
 
 示例发布流程：
 
 1. 推送代码到 `main`。
 2. 在 GitHub 页面创建 Release（例如 `v0.1.0`）。
-3. Actions 自动开始三平台构建，并把产物回传到该 Release。
+3. Actions 自动开始 Windows 构建，并把产物回传到该 Release。

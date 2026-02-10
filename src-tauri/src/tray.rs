@@ -46,14 +46,6 @@ fn build_menu(
 
     let show_main = MenuItem::with_id(app, "show_main", "显示主界面", true, None::<&str>)
         .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
-    let restart_engine = MenuItem::with_id(
-        app,
-        "restart_engine",
-        "重新初始化语音链路",
-        true,
-        None::<&str>,
-    )
-    .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)
         .map_err(|e| AppError::System(format!("创建菜单失败: {e}")))?;
 
@@ -61,7 +53,6 @@ fn build_menu(
         .item(&engine_status)
         .separator()
         .item(&show_main)
-        .item(&restart_engine)
         .separator()
         .item(&quit)
         .build()
@@ -69,7 +60,6 @@ fn build_menu(
 }
 
 fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
-    let state = app.state::<AppState>();
     match event.id.0.as_str() {
         "show_main" => {
             if let Some(window) = app.get_webview_window("main") {
@@ -82,21 +72,13 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
                 let _ = window.set_focus();
             }
         }
-        "restart_engine" => {
-            state.inner().stop_engine();
-            if let Err(e) = state.inner().start_engine() {
-                log::error!("托盘重新初始化语音链路失败: {e}");
-                state
-                    .inner()
-                    .set_last_error(format!("托盘重新初始化失败: {e}"));
-            }
-        }
         "quit" => {
             app.exit(0);
         }
         _ => {}
     }
 
+    let state = app.state::<AppState>();
     let latest = state.inner().runtime_status();
     if let Ok(menu) = build_menu(app, &latest) {
         if let Some(tray) = app.tray_by_id("main") {

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import type { AppConfig, DeviceList, GateMode, RuntimeStatus, VirtualMicStatus } from '@/lib/types';
@@ -249,25 +248,6 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [bootstrapped, config]);
 
-  const reinitializeEngine = async () => {
-    setAutoSaving(true);
-    try {
-      await invoke('stop_engine');
-      await invoke('start_engine');
-      const [runtime, vmStatus] = await Promise.all([
-        invoke<RuntimeStatus>('get_runtime_status'),
-        invoke<VirtualMicStatus>('get_virtual_mic_status'),
-      ]);
-      setStatus(runtime);
-      setVirtualMic(vmStatus);
-      setMessage('语音链路已重新初始化');
-    } catch (error) {
-      setMessage(`重新初始化失败：${String(error)}`);
-    } finally {
-      setAutoSaving(false);
-    }
-  };
-
   return (
     <main className="min-h-screen bg-background p-4 text-foreground">
       <div className="mx-auto max-w-3xl space-y-4">
@@ -300,12 +280,9 @@ export default function App() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-sm">语音链路状态：{engineLabel(status?.engine_state)}</span>
-              <Button variant="outline" onClick={reinitializeEngine} disabled={autoSaving}>
-                重新初始化语音链路
-              </Button>
+            <div className="space-y-1">
+              <p className="text-sm">语音链路状态：{engineLabel(status?.engine_state)}</p>
+              <p className="text-xs opacity-70">切换物理麦克风后会自动应用更改，无需手动重置。</p>
             </div>
           </CardContent>
         </Card>

@@ -227,11 +227,6 @@ impl AppState {
             worker.stop();
         }
     }
-
-    pub fn set_last_error(&self, msg: impl Into<String>) {
-        *self.last_error.lock() = Some(msg.into());
-    }
-
     pub fn gate_snapshot(&self) -> GateState {
         self.gate.snapshot()
     }

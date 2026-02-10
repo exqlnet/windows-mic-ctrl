@@ -1,6 +1,6 @@
 [package]
 name = "windows-mic-ctrl"
-version = "0.1.6"
+version = "0.1.7"
 description = "Windows microphone push-to-talk controller"
 authors = ["exqlnet"]
 edition = "2021"

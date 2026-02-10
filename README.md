@@ -62,6 +62,6 @@ npm run build:release
 
 ## Release
 
-- 当 GitHub 发布版本（Release Published）时，会执行 `npm run build:release`，并上传：
-  - Windows 安装包产物（`msi` / `exe` / `zip`）
-  - `windows-driver-package.zip`（驱动离线安装包）
+- 当 GitHub 发布版本（Release Published）时：
+  - 若检测到完整驱动产物（`.sys/.inf/.cat`），执行 `npm run build:release` 并上传驱动离线包。
+  - 若驱动产物未就绪，则自动降级为 `npm run build`，仅发布应用安装包。

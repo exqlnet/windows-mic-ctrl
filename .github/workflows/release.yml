@@ -34,8 +34,31 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
-      - name: Build Tauri app (with bundled driver files)
-        run: npm run build:release
+      - name: Build Tauri app
+        shell: pwsh
+        run: |
+          $driverDir = "driver/windows/artifacts/driver"
+          $hasDriverDir = Test-Path $driverDir
+          $hasSys = $false
+          $hasInf = $false
+          $hasCat = $false
+
+          if ($hasDriverDir) {
+            $hasSys = @(Get-ChildItem -Path $driverDir -File -Filter *.sys -ErrorAction SilentlyContinue).Count -gt 0
+            $hasInf = @(Get-ChildItem -Path $driverDir -File -Filter *.inf -ErrorAction SilentlyContinue).Count -gt 0
+            $hasCat = @(Get-ChildItem -Path $driverDir -File -Filter *.cat -ErrorAction SilentlyContinue).Count -gt 0
+          }
+
+          if ($hasDriverDir -and $hasSys -and $hasInf -and $hasCat) {
+            Write-Host "检测到完整驱动产物，执行 build:release"
+            "HAS_DRIVER_PACKAGE=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            npm run build:release
+          }
+          else {
+            Write-Warning "未检测到完整驱动产物（.sys/.inf/.cat），本次仅构建应用安装包。"
+            "HAS_DRIVER_PACKAGE=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            npm run build
+          }
 
       - name: Collect release files (Windows)
         shell: pwsh
@@ -47,19 +70,22 @@ jobs:
             Where-Object { $_.Name -match '\.(msi|exe|zip)$' } |
             Copy-Item -Destination release-assets -Force
 
-          Get-ChildItem -Path "src-tauri/drivers/windows" -File |
-            Where-Object { $_.Name -match '\.(sys|inf|cat|json)$' } |
-            Copy-Item -Destination release-assets/driver -Force
-
           if (-not (Get-ChildItem release-assets -File | Select-Object -First 1)) {
             throw "No Windows release assets were collected"
           }
 
-          if (-not (Get-ChildItem release-assets/driver -File | Select-Object -First 1)) {
-            throw "No bundled driver assets were collected"
+          $driverFiles = Get-ChildItem -Path "src-tauri/drivers/windows" -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '\.(sys|inf|cat|json)$' }
+
+          if ($driverFiles) {
+            $driverFiles | Copy-Item -Destination release-assets/driver -Force
+            Compress-Archive -Path release-assets/driver/* -DestinationPath release-assets/windows-driver-package.zip -Force
+            Write-Host "已生成离线驱动包：release-assets/windows-driver-package.zip"
+          }
+          else {
+            Write-Host "本次未生成驱动离线包（驱动产物未就绪）"
           }
 
-          Compress-Archive -Path release-assets/driver/* -DestinationPath release-assets/windows-driver-package.zip -Force
           Get-ChildItem release-assets -Recurse
 
       - name: Upload assets to current release

@@ -134,3 +134,4 @@
 ## 增量执行进度（2026-02-11 第三轮）
 
 - [x] 10. 构建发布驱动打包集成（新增 `stage-driver-assets.mjs`、`build:release`、Tauri resources、Release 附件驱动包）
+- [x] 10.1 发布流水线降级策略：驱动缺失时自动退化为应用包构建，驱动就绪时自动附带离线驱动包。

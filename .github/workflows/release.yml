@@ -69,8 +69,8 @@ jobs:
       - name: Build Tauri app
         run: npm run build
 
-      - name: Collect release files (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Collect release files (Linux)
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euxo pipefail
@@ -78,12 +78,23 @@ jobs:
           find "${{ matrix.bundle_dir }}" -type f \( \
             -name "*.AppImage" -o \
             -name "*.deb" -o \
-            -name "*.rpm" -o \
-            -name "*.dmg" -o \
-            -name "*.app.tar.gz" -o \
-            -name "*.tar.gz" \
+            -name "*.rpm" \
           \) -exec cp {} release-assets/ \;
           ls -la release-assets
+          test "$(find release-assets -type f | wc -l)" -gt 0
+
+      - name: Collect release files (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p release-assets
+          find "${{ matrix.bundle_dir }}" -type f \( \
+            -name "*.dmg" -o \
+            -name "*.app.tar.gz" \
+          \) -exec cp {} release-assets/ \;
+          ls -la release-assets
+          test "$(find release-assets -type f | wc -l)" -gt 0
 
       - name: Collect release files (Windows)
         if: runner.os == 'Windows'
@@ -91,8 +102,11 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           Get-ChildItem -Path "${{ matrix.bundle_dir }}" -Recurse -File |
-            Where-Object { $_.Name -match '\\.(msi|exe|zip)$' } |
+            Where-Object { $_.Name -match '\.(msi|exe|zip)$' } |
             Copy-Item -Destination release-assets -Force
+          if (-not (Get-ChildItem release-assets -File | Select-Object -First 1)) {
+            throw "No Windows release assets were collected"
+          }
           Get-ChildItem release-assets
 
       - name: Upload assets to current release

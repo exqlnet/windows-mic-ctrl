@@ -183,3 +183,9 @@
 1. SysVAD 派生源码最终产品化改造（目前仍为样例工程+流程骨架）。
 2. 正式签名链（EV/WHQL 或企业签名）。
 3. Windows 实机验收并固化报告（首启 UAC -> 端点出现 -> QQ 语音可用）。
+
+## 继续实现进展（2026-02-11 第六轮）
+
+- [x] 修复 INF 模板签名可用性：补齐 `SourceDisksNames/SourceDisksFiles/DestinationDirs`，避免 `Inf2Cat` 22.9.10。
+- [x] 修复 `DriverVer` 未来日期问题，避免 `Inf2Cat` 22.9.7。
+- [x] 版本提升到 `0.2.4` 并准备重发 Release 验证 CI。

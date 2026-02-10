@@ -7,7 +7,16 @@ Class       = MEDIA
 ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
 Provider    = %ProviderName%
 CatalogFile = windows-mic-ctrl-virtual-mic.cat
-DriverVer   = 02/11/2026,0.2.0.0
+DriverVer   = 02/10/2026,0.2.4.0
+
+[DestinationDirs]
+DriverCopyFiles = 12
+
+[SourceDisksNames]
+1 = %DiskName%,,,
+
+[SourceDisksFiles]
+windows-mic-ctrl-virtual-mic.sys = 1
 
 [Manufacturer]
 %ProviderName% = DeviceList,NTamd64
@@ -35,3 +44,4 @@ ServiceBinary  = %12%\windows-mic-ctrl-virtual-mic.sys
 ProviderName        = "exqlnet"
 DeviceName          = "Windows Mic Ctrl Virtual Mic"
 ServiceDisplayName  = "Windows Mic Ctrl Virtual Mic Service"
+DiskName            = "Windows Mic Ctrl Virtual Mic Driver Disk"

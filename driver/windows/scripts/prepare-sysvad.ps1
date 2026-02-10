@@ -17,6 +17,7 @@ $sourceRoot = (Resolve-Path $rawSourcePath).Path
 $zipPath = Join-Path $sourceRoot "windows-driver-samples.zip"
 $extractRoot = Join-Path $sourceRoot "windows-driver-samples"
 $sysvadTarget = Join-Path $sourceRoot "sysvad"
+$wilTarget = Join-Path $sourceRoot "wil"
 
 $downloadUrl = "https://github.com/microsoft/Windows-driver-samples/archive/refs/heads/$Branch.zip"
 Write-Host "下载: $downloadUrl"
@@ -41,6 +42,18 @@ if (Test-Path $sysvadTarget) {
   Remove-Item -Recurse -Force $sysvadTarget
 }
 Copy-Item -Path $sysvadSource -Destination $sysvadTarget -Recurse -Force
+
+$wilSource = Join-Path $repoDir.FullName "wil"
+if (Test-Path $wilSource) {
+  if (Test-Path $wilTarget) {
+    Remove-Item -Recurse -Force $wilTarget
+  }
+  Copy-Item -Path $wilSource -Destination $wilTarget -Recurse -Force
+  Write-Host "已复制 WIL 目录: $wilTarget"
+}
+else {
+  Write-Warning "未在上游仓库中找到 wil 目录，某些 APO 项目可能构建失败。"
+}
 
 Write-Host "已准备 SysVAD 源码: $sysvadTarget"
 Write-Host "下一步: 根据 docs/porting-checklist.md 完成品牌名、设备名与接口修改。"

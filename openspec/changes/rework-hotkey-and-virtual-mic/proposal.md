@@ -170,3 +170,4 @@
 2. 生产签名链（EV/WHQL 或企业签名）尚未落地，影响最终“无阻安装”体验。
 3. Windows 实机验收（安装后录制端点出现 + QQ 语音实测）仍需执行并固化报告。
 - 驱动构建脚本已增强工具链探测：支持通过 `vswhere` 定位 `msbuild`，降低 GitHub runner PATH 差异导致的误判失败。
+- 驱动脚本增强：`prepare-sysvad.ps1` 同步拉取 `wil` 依赖；`build-driver.ps1` 支持禁用 INF 校验并回收部分产物，提升 CI 可运行性。

@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::{
+    sync::{mpsc, Arc},
+    thread,
+    time::Duration,
+};
 
 use parking_lot::Mutex;
 
@@ -11,11 +15,105 @@ use crate::{
     types::{AppConfig, AudioRouteConfig, EngineState, GateState, RuntimeStatus},
 };
 
+struct EngineWorker {
+    stop_tx: mpsc::Sender<()>,
+    join_handle: Option<thread::JoinHandle<()>>,
+    snapshot: Arc<Mutex<RuntimeStatus>>,
+}
+
+impl EngineWorker {
+    fn new(input_device_id: String, output_device_id: String, gate: Arc<GateController>) -> Result<Self, AppError> {
+        let (stop_tx, stop_rx) = mpsc::channel::<()>();
+        let (started_tx, started_rx) = mpsc::sync_channel::<Result<(), String>>(1);
+        let snapshot = Arc::new(Mutex::new(RuntimeStatus {
+            engine_state: EngineState::Idle,
+            buffer_level_ms: 0,
+            xruns: 0,
+            last_error: None,
+            gate_state: gate.snapshot(),
+        }));
+
+        let snapshot_for_thread = snapshot.clone();
+        let join_handle = thread::spawn(move || {
+            let runtime = match EngineRuntime::start(&input_device_id, &output_device_id, gate.clone()) {
+                Ok(runtime) => {
+                    {
+                        let mut status = snapshot_for_thread.lock();
+                        status.engine_state = EngineState::Running;
+                        status.last_error = None;
+                        status.gate_state = gate.snapshot();
+                    }
+                    let _ = started_tx.send(Ok(()));
+                    runtime
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    {
+                        let mut status = snapshot_for_thread.lock();
+                        status.engine_state = EngineState::Error;
+                        status.last_error = Some(msg.clone());
+                        status.gate_state = gate.snapshot();
+                    }
+                    let _ = started_tx.send(Err(msg));
+                    return;
+                }
+            };
+
+            loop {
+                {
+                    let mut status = snapshot_for_thread.lock();
+                    *status = runtime.status(gate.snapshot());
+                }
+
+                match stop_rx.recv_timeout(Duration::from_millis(150)) {
+                    Ok(_) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        break;
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
+            }
+
+            let mut status = snapshot_for_thread.lock();
+            status.engine_state = EngineState::Idle;
+        });
+
+        match started_rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => Ok(Self {
+                stop_tx,
+                join_handle: Some(join_handle),
+                snapshot,
+            }),
+            Ok(Err(msg)) => {
+                let _ = join_handle.join();
+                Err(AppError::Audio(msg))
+            }
+            Err(_) => {
+                let _ = stop_tx.send(());
+                let _ = join_handle.join();
+                Err(AppError::Audio("启动音频引擎超时".to_string()))
+            }
+        }
+    }
+
+    fn stop(mut self) {
+        let _ = self.stop_tx.send(());
+        if let Some(handle) = self.join_handle.take() {
+            let _ = handle.join();
+        }
+    }
+
+    fn status(&self, gate_state: GateState) -> RuntimeStatus {
+        let mut status = self.snapshot.lock().clone();
+        status.gate_state = gate_state;
+        status
+    }
+}
+
 pub struct AppState {
     pub gate: Arc<GateController>,
     pub hotkey: HotkeyManager,
     config: Mutex<AppConfig>,
-    engine: Mutex<Option<EngineRuntime>>,
+    engine: Mutex<Option<EngineWorker>>,
     last_error: Mutex<Option<String>>,
 }
 
@@ -73,19 +171,21 @@ impl AppState {
             ));
         }
 
-        let runtime = EngineRuntime::start(
-            &cfg.route.input_device_id,
-            &cfg.route.bridge_output_device_id,
+        let worker = EngineWorker::new(
+            cfg.route.input_device_id.clone(),
+            cfg.route.bridge_output_device_id.clone(),
             self.gate.clone(),
         )?;
-        *self.engine.lock() = Some(runtime);
+        *self.engine.lock() = Some(worker);
         *self.last_error.lock() = None;
 
         Ok(())
     }
 
     pub fn stop_engine(&self) {
-        let _ = self.engine.lock().take();
+        if let Some(worker) = self.engine.lock().take() {
+            worker.stop();
+        }
     }
 
     pub fn set_last_error(&self, msg: impl Into<String>) {
@@ -117,6 +217,10 @@ impl AppState {
 
     pub fn validate_route_exists(&self) -> Result<(), AppError> {
         let cfg = self.config.lock().clone();
+        if cfg.route.input_device_id.is_empty() && cfg.route.bridge_output_device_id.is_empty() {
+            return Ok(());
+        }
+
         let devices = list_devices()?;
         let in_ok = devices.inputs.iter().any(|d| d.id == cfg.route.input_device_id);
         let out_ok = devices

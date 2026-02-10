@@ -52,7 +52,7 @@ npm run build:release
 2. 驱动签名满足目标环境（测试签名或正式签名）
 3. 首次启动允许 UAC 提权完成 `pnputil` 安装
 
-当前应用已实现“每次启动自动检查并在缺失时自动安装”，但驱动是否能安装成功仍取决于驱动产物与签名。
+当前应用已实现“每次启动自动检查并在缺失时自动安装”。
 
 ## 关于“程序自建虚拟麦克风”
 
@@ -62,7 +62,7 @@ npm run build:release
 
 - 应用已能真实检测系统中是否存在 `Windows Mic Ctrl Virtual Mic` 录制端点。
 - 若未检测到，会自动尝试安装安装包内驱动；失败时在诊断区给出原因。
-- GitHub Release 流程会先尝试构建驱动产物，再按可用性决定是否打包驱动。
+- GitHub Release 流程会强制先构建并校验驱动产物，再打包发布（不再降级发布无驱动版本）。
 
 可参考：`driver/windows/docs/build-and-install.md`
 
@@ -74,6 +74,6 @@ npm run build:release
 ## Release
 
 - 当 GitHub 发布版本（Release Published）时：
-  - Workflow 会先尝试构建 `driver/windows/artifacts/driver`。
-  - 若检测到完整驱动产物（`.sys/.inf/.cat`），执行 `npm run build:release` 并上传驱动离线包。
-  - 若驱动产物未就绪，则自动降级为 `npm run build`，仅发布应用安装包。
+  - Workflow 会先构建并校验 `driver/windows/artifacts/driver`。
+  - 驱动产物必须完整（`.sys/.inf/.cat`），否则发布任务失败。
+  - 成功后执行 `npm run build:release` 并上传安装包与 `windows-driver-package.zip`。

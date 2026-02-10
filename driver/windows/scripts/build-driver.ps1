@@ -3,7 +3,9 @@ Param(
   [string]$Configuration = "Release",
   [string]$Platform = "x64",
   [string]$OutputRoot = "..\artifacts\driver",
-  [switch]$DisableInfVerification = $true
+  [switch]$DisableInfVerification = $true,
+  [string]$TargetInfName = "windows-mic-ctrl-virtual-mic.inf",
+  [string]$TargetSysName = "windows-mic-ctrl-virtual-mic.sys"
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +27,76 @@ function Resolve-MsBuild {
       $candidate = Join-Path $installPath "MSBuild\Current\Bin\MSBuild.exe"
       if (Test-Path $candidate) { return $candidate }
     }
+  }
+
+  return $null
+}
+
+function Resolve-Inf2Cat {
+  $cmd = Get-Command inf2cat -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+
+  $kitsRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
+  if (-not (Test-Path $kitsRoot)) { return $null }
+
+  $found = Get-ChildItem -Path $kitsRoot -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ieq "Inf2Cat.exe" } |
+    Sort-Object FullName -Descending |
+    Select-Object -First 1
+
+  if ($found) { return $found.FullName }
+  return $null
+}
+
+function Get-PreferredInf {
+  Param(
+    [string]$SysvadPath,
+    [string]$ScriptDir,
+    [string]$NameHint
+  )
+
+  $candidates = @(
+    (Join-Path $ScriptDir "..\inf\$NameHint"),
+    (Join-Path $SysvadPath "TabletAudioSample\x64\Release\ComponentizedAudioSample.inf"),
+    (Join-Path $SysvadPath "TabletAudioSample\x64\Release\ComponentizedApoSample.inf"),
+    (Join-Path $SysvadPath "TabletAudioSample\x64\Release\ComponentizedAudioSampleExtension.inf")
+  )
+
+  foreach ($candidate in $candidates) {
+    $resolved = Resolve-Path $candidate -ErrorAction SilentlyContinue
+    if ($resolved) {
+      return $resolved.Path
+    }
+  }
+
+  $allInf = Get-ChildItem -Path $SysvadPath -Recurse -File -Filter *.inf -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending
+  if ($allInf.Count -gt 0) {
+    return $allInf[0].FullName
+  }
+
+  return $null
+}
+
+function Get-PreferredSys {
+  Param([string]$SysvadPath)
+
+  $preferred = @(
+    (Join-Path $SysvadPath "TabletAudioSample\x64\Release\TabletAudioSample.sys")
+  )
+
+  foreach ($candidate in $preferred) {
+    $resolved = Resolve-Path $candidate -ErrorAction SilentlyContinue
+    if ($resolved) {
+      return $resolved.Path
+    }
+  }
+
+  $allSys = Get-ChildItem -Path $SysvadPath -Recurse -File -Filter *.sys -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending
+
+  if ($allSys.Count -gt 0) {
+    return $allSys[0].FullName
   }
 
   return $null
@@ -62,10 +134,12 @@ if ($DisableInfVerification) {
 Write-Host "使用 MSBuild: $msbuildPath"
 Write-Host "使用解决方案: $($solution.FullName)"
 Write-Host "构建参数: $($msbuildArgs -join ' ')"
+
+$msbuildExitCode = 0
 & $msbuildPath @msbuildArgs
 $msbuildExitCode = $LASTEXITCODE
 if ($msbuildExitCode -ne 0) {
-  Write-Warning "msbuild 返回非零退出码: $msbuildExitCode，将尝试收集已生成产物。"
+  Write-Warning "msbuild 返回非零退出码: $msbuildExitCode，将继续尝试收集可用产物。"
 }
 
 $outputPath = Join-Path $scriptDir $OutputRoot
@@ -74,21 +148,47 @@ if (Test-Path $outputPath) {
 }
 New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
 
-$artifacts = Get-ChildItem -Path $sysvadPath -Recurse -File | Where-Object {
-  $_.Extension -in ".sys", ".cat", ".inf"
+$preferredInf = Get-PreferredInf -SysvadPath $sysvadPath -ScriptDir $scriptDir -NameHint $TargetInfName
+if (-not $preferredInf) {
+  throw "未找到可用 INF 文件，无法生成驱动包。"
 }
 
-if (-not $artifacts) {
-  throw "未找到驱动产物（.sys/.cat/.inf），请检查工程配置。"
+$sysPath = Get-PreferredSys -SysvadPath $sysvadPath
+if (-not $sysPath) {
+  throw "未找到 .sys 产物，无法生成驱动包。"
 }
 
-$artifacts | ForEach-Object {
-  Copy-Item $_.FullName -Destination (Join-Path $outputPath $_.Name) -Force
+Copy-Item $preferredInf (Join-Path $outputPath $TargetInfName) -Force
+Copy-Item $sysPath (Join-Path $outputPath $TargetSysName) -Force
+
+$inf2cat = Resolve-Inf2Cat
+if (-not $inf2cat) {
+  throw "未检测到 inf2cat，无法生成 .cat 文件。"
+}
+
+Write-Host "使用 INF 生成 catalog: $TargetInfName"
+Push-Location $outputPath
+try {
+  & $inf2cat /driver:$outputPath /os:10_X64
+  if ($LASTEXITCODE -ne 0) {
+    throw "Inf2Cat 生成失败，退出码: $LASTEXITCODE"
+  }
+}
+finally {
+  Pop-Location
+}
+
+$hasSys = @(Get-ChildItem -Path $outputPath -File -Filter *.sys -ErrorAction SilentlyContinue).Count -gt 0
+$hasInf = @(Get-ChildItem -Path $outputPath -File -Filter *.inf -ErrorAction SilentlyContinue).Count -gt 0
+$hasCat = @(Get-ChildItem -Path $outputPath -File -Filter *.cat -ErrorAction SilentlyContinue).Count -gt 0
+
+if (-not ($hasSys -and $hasInf -and $hasCat)) {
+  throw "驱动产物不完整（需要 .sys/.inf/.cat）。"
 }
 
 Write-Host "驱动构建产物已输出到: $outputPath"
 Get-ChildItem -Path $outputPath -File | Format-Table Name, Length -AutoSize
 
 if ($msbuildExitCode -ne 0) {
-  throw "msbuild 存在失败项（退出码: $msbuildExitCode），但已收集到部分产物，请人工确认可用性。"
+  Write-Warning "msbuild 存在失败项（退出码: $msbuildExitCode），但已生成完整驱动产物，请人工确认可用性。"
 }

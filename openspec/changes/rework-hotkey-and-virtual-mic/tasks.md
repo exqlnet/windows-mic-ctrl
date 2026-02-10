@@ -117,44 +117,69 @@
 
 ## 增量执行进度（2026-02-11）
 
-- [x] 7. 方案 A 决策落板与状态修正（新增端点/服务/Test Mode 组合检测）
-- [x] 8. Windows 驱动工程骨架增强（补齐文档、脚本与目录约定）
-- [x] 9. SysVAD 接入工程化脚本（新增 `dev-bootstrap.ps1`，串联准备步骤）
-- [ ] 4A. 虚拟麦驱动与用户态服务（真实内核端点 + IOCTL 音频注入）
+- [x] 7. 方案 A 决策落板与状态修正（新增端点真实检测 + 状态文案）
+- [x] 8. Windows 驱动工程骨架增强
+- [x] 9. SysVAD 接入工程化脚本
 
-### 10. 构建发布驱动打包集成
+## 继续实现进展（2026-02-11 第二轮）
 
-- 任务目标：把驱动产物纳入应用发布构建流程，实现离线安装包分发。
-- 影响范围：`scripts/*`、`src-tauri/tauri.conf.json`、`.github/workflows/release.yml`、`README.md`
-- 实施要点：新增驱动产物校验与拷贝脚本，构建时自动打包 `.sys/.inf/.cat`。
-- 验收标准：`build:release` 成功时安装包包含驱动资源，Release 附件含独立驱动压缩包。
-- 验证方法：脚本执行日志检查 + JSON 配置检查 + workflow 走查。
-- 回滚方式：移除构建前置脚本并恢复原 `build` 流程。
+- 已实现鼠标全局 Hook（`WH_MOUSE_LL`）并接入快捷键系统：
+  - 支持 `MouseLeft/MouseRight/MouseMiddle/MouseBack/MouseForward`
+  - 支持与 `Ctrl/Alt/Shift/Super` 组合
+  - PTT 模式：按下开麦、释放闭麦
+  - Toggle/Hybrid：按下切换状态
+- 已改为“输入框点击即录入”交互（无独立“按键录入”按钮）：
+  - 聚焦输入框显示 `Press key...`
+  - 首次点击不误触发鼠标录入（180ms 防抖）
+- 已移除顶部标题卡片与“保存配置/刷新/重初始化按钮”交互，配置改为自动保存并自动应用。
+- 已在后端提供驱动可用性细分诊断：
+  - 录制端点真实检测（是否出现 `Windows Mic Ctrl Virtual Mic`）
+  - 驱动服务状态检测（未安装/已安装未运行/运行中/未知）
+  - Test Mode 检测（`bcdedit`）
+- 已把初始化失败写入运行状态，避免“假就绪”误判。
+- 已同步驱动文档，明确 Windows 实机完成路径与验证步骤。
 
-## 增量执行进度（2026-02-11 第三轮）
+### 当前阻断（仍需 Windows 驱动开发环境）
 
-- [x] 10. 构建发布驱动打包集成（新增 `stage-driver-assets.mjs`、`build:release`、Tauri resources、Release 附件驱动包）
-- [x] 10.1 发布流水线降级策略：驱动缺失时自动退化为应用包构建，驱动就绪时自动附带离线驱动包。
+1. SysVAD 派生代码改造尚未完成（仅有脚本与流程骨架）。
+2. 真实内核端点与用户态 IOCTL 音频注入链路尚未落地。
+3. 因当前环境非 Windows + WDK，无法在本机完成驱动编译/安装验收。
 
-### 11. 启动自动检查并安装虚拟麦驱动
+## 继续实现进展（2026-02-11 第三轮）
 
-- 任务目标：每次应用启动自动检查虚拟麦驱动，缺失时自动触发安装。
-- 影响范围：`src-tauri/src/lib.rs`、`src-tauri/src/app_state.rs`、`src-tauri/src/driver_installer.rs`
-- 实施要点：启动线程执行驱动检查；从安装包资源目录定位 INF；通过 UAC 执行 `pnputil`。
-- 验收标准：未安装驱动时启动后会触发安装流程；安装成功后虚拟麦状态变为就绪。
-- 验证方法：代码审查 + 本地构建测试；Windows 实机验证 UAC 安装与端点出现。
-- 回滚方式：关闭启动自动安装调用，仅保留状态检测。
+- 已新增构建前驱动产物打包脚本：`scripts/stage-driver-assets.mjs`。
+- 发布构建命令新增：`npm run build:release`，在 `tauri build` 前强制校验并拷贝 `.sys/.inf/.cat`。
+- 已配置 Tauri `bundle.resources`，驱动产物会进入安装包资源。
+- 已更新 GitHub Release 工作流，发布时额外产出并上传 `windows-driver-package.zip`（离线驱动包）。
 
-### 12. Release 流程补齐驱动构建步骤
+### 影响与边界
 
-- 任务目标：发布流水线中增加驱动产物构建尝试，减少人工漏构建。
-- 影响范围：`.github/workflows/release.yml`、`driver/windows/scripts/*`
-- 实施要点：Release workflow 增加 `check-toolchain/prepare-sysvad/build-driver` 步骤（best effort）。
-- 验收标准：workflow 日志可见驱动构建步骤，成功时自动进入驱动打包路径。
-- 验证方法：GitHub Actions workflow 运行记录检查。
-- 回滚方式：移除该步骤，恢复仅应用构建。
+1. 若缺少驱动产物（`.sys/.inf/.cat`），`build:release` 会显式失败，避免发布“无驱动包”的安装器。
+2. 当前仍未在安装器内自动执行驱动安装（仅完成离线分发与打包）；安装动作由管理员脚本完成。
+- 发布流水线已调整为“驱动产物感知”模式：
+  - 有完整 `.sys/.inf/.cat` 时执行 `build:release` 并附带驱动离线包；
+  - 无驱动产物时降级为应用安装包构建，避免发布流程硬失败。
 
-## 增量执行进度（2026-02-11 第四轮）
+## 继续实现进展（2026-02-11 第四轮）
 
-- [x] 11. 启动自动检查并安装虚拟麦驱动（缺失时触发 UAC 安装）
-- [x] 12. Release 流程补齐驱动构建步骤（best effort）
+- 应用启动流程已接入“每次启动自动检查并安装驱动”：
+  - 若未检测到虚拟麦录制端点，自动从安装包资源定位 INF；
+  - 自动触发 `pnputil` 安装（UAC）；
+  - 安装后自动轮询端点是否出现。
+- Release workflow 已新增驱动构建步骤（best effort）：
+  - `check-toolchain` -> `prepare-sysvad` -> `apply-porting-overrides` -> `build-driver`。
+
+### 本轮补齐（2026-02-11 第五轮）
+
+- [x] 强化 `prepare-sysvad.ps1`：同时写入两条 WIL 路径（`driver/windows/src/upstream/wil` 与 `driver/windows/src/wil`），修复 APO 项目相对 include 查找失败。
+- [x] 重写 `build-driver.ps1`：
+  - 固定输出目标 INF 文件名 `windows-mic-ctrl-virtual-mic.inf`
+  - 从可用 `.sys` + 指定 INF 生成 catalog（Inf2Cat）
+  - 产物完整性（`.sys/.inf/.cat`）强校验
+- [x] 发布工作流改为“驱动必需”：若驱动不完整则直接失败，不再降级发布“无驱动安装包”。
+
+### 仍需完成（Windows 实机）
+
+1. SysVAD 派生源码最终产品化改造（目前仍为样例工程+流程骨架）。
+2. 正式签名链（EV/WHQL 或企业签名）。
+3. Windows 实机验收并固化报告（首启 UAC -> 端点出现 -> QQ 语音可用）。

@@ -7,6 +7,28 @@ Param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-VSWhere {
+  $path = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+  if (Test-Path $path) { return $path }
+  return $null
+}
+
+function Resolve-MsBuild {
+  $cmd = Get-Command msbuild -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+
+  $vswhere = Resolve-VSWhere
+  if ($vswhere) {
+    $installPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+    if ($installPath) {
+      $candidate = Join-Path $installPath "MSBuild\Current\Bin\MSBuild.exe"
+      if (Test-Path $candidate) { return $candidate }
+    }
+  }
+
+  return $null
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $sysvadPath = Resolve-Path (Join-Path $scriptDir $SysvadRoot) -ErrorAction SilentlyContinue
 if (-not $sysvadPath) {
@@ -14,8 +36,8 @@ if (-not $sysvadPath) {
 }
 $sysvadPath = $sysvadPath.Path
 
-$msbuild = Get-Command msbuild -ErrorAction SilentlyContinue
-if (-not $msbuild) {
+$msbuildPath = Resolve-MsBuild
+if (-not $msbuildPath) {
   throw "未检测到 msbuild，请安装 Visual Studio Build Tools + WDK。"
 }
 
@@ -24,8 +46,9 @@ if (-not $solution) {
   throw "未找到 .sln，请确认 SysVAD 源码完整。"
 }
 
+Write-Host "使用 MSBuild: $msbuildPath"
 Write-Host "使用解决方案: $($solution.FullName)"
-& $msbuild.Source $solution.FullName /m /p:Configuration=$Configuration /p:Platform=$Platform
+& $msbuildPath $solution.FullName /m /p:Configuration=$Configuration /p:Platform=$Platform
 if ($LASTEXITCODE -ne 0) {
   throw "msbuild 失败，退出码: $LASTEXITCODE"
 }

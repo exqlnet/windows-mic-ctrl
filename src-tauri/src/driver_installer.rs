@@ -1,5 +1,3 @@
-use crate::error::AppError;
-
 #[cfg(target_os = "windows")]
 mod imp {
     use std::{
@@ -185,8 +183,8 @@ mod imp {
 pub use imp::ensure_driver_installed;
 
 #[cfg(not(target_os = "windows"))]
-pub fn ensure_driver_installed(_app: &tauri::AppHandle) -> Result<String, AppError> {
-    Err(AppError::System(
+pub fn ensure_driver_installed(_app: &tauri::AppHandle) -> Result<String, crate::error::AppError> {
+    Err(crate::error::AppError::System(
         "当前平台不支持自动安装 Windows 虚拟麦驱动".to_string(),
     ))
 }

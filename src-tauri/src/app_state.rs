@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 
 use crate::{
     audio::{complete_route_defaults, list_devices, EngineRuntime},
-    config,
+    config, driver_installer,
     error::AppError,
     gate::GateController,
     hotkey::HotkeyManager,
@@ -256,6 +256,26 @@ impl AppState {
                 };
                 *self.virtual_mic_status.lock() = fallback.clone();
                 fallback
+            }
+        }
+    }
+
+    pub fn ensure_virtual_mic_driver(&self, app: &tauri::AppHandle) -> Result<(), AppError> {
+        match driver_installer::ensure_driver_installed(app) {
+            Ok(message) => {
+                log::info!("虚拟麦自动安装检查结果: {message}");
+                let _ = self.virtual_mic_status();
+                Ok(())
+            }
+            Err(e) => {
+                log::warn!("虚拟麦自动安装失败: {e}");
+                let fallback = VirtualMicStatus {
+                    backend: "windows-kernel-driver".to_string(),
+                    ready: false,
+                    detail: format!("自动安装失败：{e}"),
+                };
+                *self.virtual_mic_status.lock() = fallback;
+                Err(e)
             }
         }
     }

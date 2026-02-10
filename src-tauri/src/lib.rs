@@ -2,6 +2,7 @@ mod app_state;
 mod audio;
 mod commands;
 mod config;
+mod driver_installer;
 mod error;
 mod gate;
 mod hotkey;
@@ -43,11 +44,19 @@ pub fn run() {
                 .apply(app.handle(), &cfg.hotkey, state.gate.clone())
                 .map_err(|e| e.to_string())?;
 
-            if let Err(e) = state.start_engine() {
-                log::warn!("启动自动初始化失败: {e}");
-            }
-
             app.manage(state);
+
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let state = app_handle.state::<AppState>();
+                if let Err(e) = state.inner().ensure_virtual_mic_driver(&app_handle) {
+                    log::warn!("启动时自动安装虚拟麦驱动失败: {e}");
+                }
+
+                if let Err(e) = state.inner().start_engine() {
+                    log::warn!("启动自动初始化失败: {e}");
+                }
+            });
             tray::create_tray(app.handle()).map_err(|e| e.to_string())?;
 
             if cfg.launch_on_startup {

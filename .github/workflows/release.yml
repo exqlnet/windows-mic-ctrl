@@ -34,6 +34,16 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      - name: Build driver artifacts (best effort)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Write-Host "尝试构建虚拟麦驱动产物..."
+          pwsh -File driver/windows/scripts/check-toolchain.ps1
+          pwsh -File driver/windows/scripts/prepare-sysvad.ps1
+          pwsh -File driver/windows/scripts/apply-porting-overrides.ps1
+          pwsh -File driver/windows/scripts/build-driver.ps1
+
       - name: Build Tauri app
         shell: pwsh
         run: |

@@ -135,3 +135,26 @@
 
 - [x] 10. 构建发布驱动打包集成（新增 `stage-driver-assets.mjs`、`build:release`、Tauri resources、Release 附件驱动包）
 - [x] 10.1 发布流水线降级策略：驱动缺失时自动退化为应用包构建，驱动就绪时自动附带离线驱动包。
+
+### 11. 启动自动检查并安装虚拟麦驱动
+
+- 任务目标：每次应用启动自动检查虚拟麦驱动，缺失时自动触发安装。
+- 影响范围：`src-tauri/src/lib.rs`、`src-tauri/src/app_state.rs`、`src-tauri/src/driver_installer.rs`
+- 实施要点：启动线程执行驱动检查；从安装包资源目录定位 INF；通过 UAC 执行 `pnputil`。
+- 验收标准：未安装驱动时启动后会触发安装流程；安装成功后虚拟麦状态变为就绪。
+- 验证方法：代码审查 + 本地构建测试；Windows 实机验证 UAC 安装与端点出现。
+- 回滚方式：关闭启动自动安装调用，仅保留状态检测。
+
+### 12. Release 流程补齐驱动构建步骤
+
+- 任务目标：发布流水线中增加驱动产物构建尝试，减少人工漏构建。
+- 影响范围：`.github/workflows/release.yml`、`driver/windows/scripts/*`
+- 实施要点：Release workflow 增加 `check-toolchain/prepare-sysvad/build-driver` 步骤（best effort）。
+- 验收标准：workflow 日志可见驱动构建步骤，成功时自动进入驱动打包路径。
+- 验证方法：GitHub Actions workflow 运行记录检查。
+- 回滚方式：移除该步骤，恢复仅应用构建。
+
+## 增量执行进度（2026-02-11 第四轮）
+
+- [x] 11. 启动自动检查并安装虚拟麦驱动（缺失时触发 UAC 安装）
+- [x] 12. Release 流程补齐驱动构建步骤（best effort）

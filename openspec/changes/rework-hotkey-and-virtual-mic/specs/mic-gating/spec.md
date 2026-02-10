@@ -74,3 +74,12 @@
 - When 执行发布构建流程
 - Then 系统 SHALL 将驱动产物打包进安装包资源
 - And SHALL 输出独立驱动离线包用于排障安装
+
+### Requirement: 启动自动安装虚拟麦驱动
+系统 MUST 在 Windows 启动时检查虚拟麦驱动状态；若驱动缺失，系统 SHALL 自动触发安装流程（需要用户完成 UAC 授权）。
+
+#### Scenario: 启动时检测缺失驱动
+- Given 用户首次安装并启动应用
+- When 系统未检测到虚拟麦录制端点
+- Then 系统 SHALL 自动尝试安装安装包内驱动
+- And SHALL 在安装完成后重新检测端点状态

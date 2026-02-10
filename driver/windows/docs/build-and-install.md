@@ -53,3 +53,13 @@
 - `npm run build:release`
 
 该命令会自动校验并拷贝 `.sys/.inf/.cat` 到 `src-tauri/drivers/windows`，并在 Tauri 打包时写入安装包资源。发布工作流也会额外上传 `windows-driver-package.zip` 供离线排障安装。
+
+## 7. 应用启动自动安装行为
+
+从 `v0.1.9` 起，应用在 Windows 启动时会自动执行：
+
+1. 检查录制端点是否已有 `Windows Mic Ctrl Virtual Mic`
+2. 若缺失，尝试从安装包内 `drivers/windows/*.inf` 触发驱动安装（UAC）
+3. 安装后轮询验证端点是否出现
+
+若安装失败，应用会在诊断信息中显示失败原因（例如：拒绝 UAC、签名不满足策略、需要重启）。

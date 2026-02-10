@@ -157,7 +157,7 @@ pub fn initialize() -> Result<VirtualMicStatus, AppError> {
         }
 
         hints.push(
-            "建议在管理员 PowerShell 依次执行：driver/windows/scripts/dev-bootstrap.ps1 -> driver/windows/scripts/build-driver.ps1 -> driver/windows/scripts/install-driver-test.ps1。"
+            "应用启动时会自动尝试安装内置驱动（需 UAC 授权）；若仍失败，请按文档手动执行驱动安装脚本。"
                 .to_string(),
         );
 
